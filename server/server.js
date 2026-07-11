@@ -1,5 +1,6 @@
 // FormFit backend: serves the frontend + a small JSON API for
 // accounts (signup/login, bcrypt + JWT) and per-user state sync.
+require("dotenv").config();
 
 const express = require("express");
 const path = require("path");
@@ -28,15 +29,6 @@ app.use(express.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 // ---------- helpers ----------
-const stmts = {
-  userByName: db.prepare("SELECT * FROM users WHERE username = ?"),
-  insertUser: db.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)"),
-  getState: db.prepare("SELECT data FROM states WHERE user_id = ?"),
-  upsertState: db.prepare(`
-    INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, datetime('now'))
-    ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-  `),
-};
 
 function signToken(user) {
   return jwt.sign({ uid: user.id, username: user.username }, JWT_SECRET, {
@@ -56,61 +48,104 @@ function auth(req, res, next) {
   }
 }
 
-function loadState(userId) {
-  const row = stmts.getState.get(userId);
+async function loadState(userId) {
+  const result = await db.query("SELECT data FROM states WHERE user_id = $1", [userId]);
+  const row = result.rows[0];
   return row ? JSON.parse(row.data) : null;
 }
 
 // ---------- auth routes ----------
 app.post("/api/auth/signup", async (req, res) => {
-  const { username, password } = req.body || {};
-  if (typeof username !== "string" || !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-    return res
-      .status(400)
-      .json({ error: "Username must be 3–20 letters, numbers, or underscores" });
+  try {
+    const { username, password } = req.body || {};
+    if (typeof username !== "string" || !/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      return res
+        .status(400)
+        .json({ error: "Username must be 3–20 letters, numbers, or underscores" });
+    }
+    if (typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    
+    const existing = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "That username is taken" });
+    }
+    
+    const hash = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id",
+      [username, hash]
+    );
+    const user = { id: result.rows[0].id, username };
+    res.json({ token: signToken(user), username, state: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
-  if (typeof password !== "string" || password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
-  }
-  if (stmts.userByName.get(username)) {
-    return res.status(409).json({ error: "That username is taken" });
-  }
-  const hash = await bcrypt.hash(password, 10);
-  const info = stmts.insertUser.run(username, hash);
-  const user = { id: info.lastInsertRowid, username };
-  res.json({ token: signToken(user), username, state: null });
 });
 
 app.post("/api/auth/login", async (req, res) => {
-  const { username, password } = req.body || {};
-  const user =
-    typeof username === "string" ? stmts.userByName.get(username.trim()) : null;
-  const ok = user && (await bcrypt.compare(String(password ?? ""), user.password_hash));
-  if (!ok) return res.status(401).json({ error: "Wrong username or password" });
-  res.json({ token: signToken(user), username: user.username, state: loadState(user.id) });
+  try {
+    const { username, password } = req.body || {};
+    let user = null;
+    if (typeof username === "string") {
+      const result = await db.query("SELECT * FROM users WHERE username = $1", [username.trim()]);
+      user = result.rows[0];
+    }
+    
+    const ok = user && (await bcrypt.compare(String(password ?? ""), user.password_hash));
+    if (!ok) return res.status(401).json({ error: "Wrong username or password" });
+    
+    const state = await loadState(user.id);
+    res.json({ token: signToken(user), username: user.username, state });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // ---------- session + state sync ----------
-app.get("/api/me", auth, (req, res) => {
-  res.json({ username: req.user.username, state: loadState(req.user.uid) });
+app.get("/api/me", auth, async (req, res) => {
+  try {
+    const state = await loadState(req.user.uid);
+    res.json({ username: req.user.username, state });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-app.put("/api/state", auth, (req, res) => {
-  const { state } = req.body || {};
-  if (!state || typeof state !== "object" || Array.isArray(state)) {
-    return res.status(400).json({ error: "Invalid state payload" });
+app.put("/api/state", auth, async (req, res) => {
+  try {
+    const { state } = req.body || {};
+    if (!state || typeof state !== "object" || Array.isArray(state)) {
+      return res.status(400).json({ error: "Invalid state payload" });
+    }
+    const data = JSON.stringify(state);
+    if (data.length > MAX_STATE_BYTES) {
+      return res.status(413).json({ error: "State payload too large" });
+    }
+    
+    await db.query(`
+      INSERT INTO states (user_id, data, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at
+    `, [req.user.uid, data]);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
-  const data = JSON.stringify(state);
-  if (data.length > MAX_STATE_BYTES) {
-    return res.status(413).json({ error: "State payload too large" });
-  }
-  stmts.upsertState.run(req.user.uid, data);
-  res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`FormFit running → http://localhost:${PORT}`);
-  if (!process.env.JWT_SECRET) {
-    console.log("(dev) Using generated JWT secret in data/.jwt-secret — set JWT_SECRET in production.");
-  }
-});
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, () => {
+    console.log(`FormFit running → http://localhost:${PORT}`);
+    if (!process.env.JWT_SECRET) {
+      console.log("(dev) Using generated JWT secret in data/.jwt-secret — set JWT_SECRET in production.");
+    }
+  });
+}
+
+module.exports = app;
