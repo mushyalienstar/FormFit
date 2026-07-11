@@ -1,0 +1,16 @@
+{
+  "name": "formfit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FormFit — camera-verified fitness XP tracker with accounts",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.5.0",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
