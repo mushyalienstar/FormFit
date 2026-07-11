@@ -5,17 +5,17 @@
    ============================================================ */
 
 :root {
-  --rubber: #1C2420;   /* page ground — gym-floor dark */
-  --board: #2A362F;    /* chalkboard surface */
-  --board-2: #232D28;  /* recessed surface */
-  --chalk: #EFE9DA;    /* text, chalk white */
+  --rubber: #ffffff;   /* page ground — white */
+  --board: #f4f4f4;    /* surface */
+  --board-2: #e8e8e8;  /* recessed surface */
+  --chalk: #1C2420;    /* text — dark */
   --ink: #5D7BE8;      /* stamp ink — verified only */
-  --pencil: #A8B0A4;   /* graphite — honor + secondary */
+  --pencil: #5a6360;   /* graphite — honor + secondary */
   --yellow: #E3B94F;   /* coach's chalk — corrections only */
 
   --ink-dim: rgba(93, 123, 232, 0.4);
-  --pencil-dim: rgba(168, 176, 164, 0.45);
-  --line: rgba(239, 233, 218, 0.12);
+  --pencil-dim: rgba(90, 99, 96, 0.45);
+  --line: rgba(28, 36, 32, 0.12);
 
   --display: "Zilla Slab", Georgia, serif;
   --body: "IBM Plex Sans", system-ui, sans-serif;
