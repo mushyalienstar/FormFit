@@ -1,4 +1,4 @@
-# 💪 FormFit
+# FormFit
 
 **FormFit** is a camera-verified fitness XP tracker that gamifies your workouts. Built by **Arnav Govil**.
 
