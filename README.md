@@ -1,4 +1,4 @@
-# 💪 FormFit — Camera-Verified Fitness XP Tracker
+# 💪 FormFit: Camera-Verified Fitness XP Tracker
 
 Gamified workouts with a twist: the camera is the referee. Clean, full-range reps
 earn full XP and unlock avatars; honor-system workouts earn reduced XP that never
