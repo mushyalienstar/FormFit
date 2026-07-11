@@ -1,8 +1,4 @@
-# 💪 FormFit
-
-**FormFit** is a camera-verified fitness XP tracker that gamifies your workouts. Built by **Arnav Govil**.
-
-**Live Demo:** [https://form-fit-ten.vercel.app/](https://form-fit-ten.vercel.app/)
+# 💪 FormFit — Camera-Verified Fitness XP Tracker
 
 Gamified workouts with a twist: the camera is the referee. Clean, full-range reps
 earn full XP and unlock avatars; honor-system workouts earn reduced XP that never
